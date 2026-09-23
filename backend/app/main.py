@@ -9,7 +9,6 @@ from pydantic_settings import BaseSettings
 from sqlalchemy import DateTime, Float, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from app.alarm_skip import mask_detail_pct, store_facing_pct
 from app.rules import classify
 
 
@@ -144,12 +143,11 @@ def list_readings(_user: dict = Depends(current_user)):
 @app.post("/api/readings", status_code=201)
 async def create_reading(body: ReadingIn, user: dict = Depends(require_writer)):
     level, note = classify(body.ch4_pct)
-    facing = store_facing_pct(body.ch4_pct)
     db = SessionLocal()
     try:
         row = Reading(
             site=body.site.strip(),
-            ch4_pct=facing,
+            ch4_pct=body.ch4_pct,
             level=level,
             note=note,
             created_by=user["username"],
@@ -180,13 +178,12 @@ def reading_detail(reading_id: int, _user: dict = Depends(current_user)):
         row = db.query(Reading).filter(Reading.id == reading_id).first()
         if row is None:
             raise HTTPException(status_code=404, detail="记录不存在")
-        masked = mask_detail_pct(row.ch4_pct)
         return {
             "id": row.id,
             "site": row.site,
-            "ch4_pct": masked["display"] if not masked["show_pct"] else row.ch4_pct,
-            "ch4_display": masked["display"],
-            "ch4_blurb": masked["blurb"],
+            "ch4_pct": row.ch4_pct,
+            "ch4_display": str(row.ch4_pct),
+            "ch4_blurb": "甲烷实测浓度",
             "level": row.level,
             "note": row.note,
             "created_by": row.created_by,
